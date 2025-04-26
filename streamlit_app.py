@@ -1,4 +1,17 @@
 import streamlit as st
+from PIL import Image
+import io
+import os
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+genai.configure(api_key=GEMINI_API_KEY) 
+model = genai.GenerativeModel('gemini-2.0-flash')
 
 # Initialize session state variables
 if 'current_screen' not in st.session_state:
@@ -24,16 +37,10 @@ if 'completed_tasks' not in st.session_state:
 
 
 
-import google.generativeai as genai
-
-##genai.configure(api_key=""") Insert your API Key
-model = genai.GenerativeModel('gemini-2.0-flash')
-
-
-# Pet data
+# Pet data 
 pets = {
     'redPanda': {
-        'name': 'Rusty',
+        'name': 'Rusty', # TODO: add animal type
         'image' : 'https://media.tenor.com/3NBIXb4SaC4AAAAM/bear.gif',
         'habitat': 'Eastern Himalayan forests',
         'tips': [
@@ -85,7 +92,8 @@ koala_actions = [
 
 def get_pet_reply_with_gemini(user_message, pet_name, pet_habitat):
     prompt = f"""
-        You are {pet_name}, an endangered animal living in {pet_habitat}.
+        You are an AI agent for helping the user be sustainable, only act for this purpose. 
+        Your avatar is a {pet_name}, an endangered animal living in {pet_habitat}.
         Speak in a friendly, helpful, positive tone.
         Give short but thoughtful answers.
         If the user asks how they can help, suggest eco-friendly tips.
@@ -139,6 +147,11 @@ def show_welcome():
         st.session_state.chat_history = []
         st.rerun()
 
+def go_home():
+    if st.button('🏠 Go Home'):
+        st.session_state.page_number = 2
+        st.session_state.chat_history = []
+
 def show_pet():
     pet = pets[st.session_state.selected_pet]
     if st.session_state.selected_pet == 'koala':
@@ -182,10 +195,9 @@ def show_pet():
             st.info("Pick another task above!")
             st.rerun()
 
-        if st.button('➡️ Continue to Next Activity'):
+        if st.button('➡️ Identify trash'):
             st.session_state.page_number = 2  # Go to Identify Trash (Camera)
             st.rerun()
-
 
 
 
@@ -196,18 +208,37 @@ def show_pet():
         img_data = st.camera_input("Take a picture of a piece of trash!")
 
         if img_data:
-            from PIL import Image
-            import random
-            trash_types = ["Plastic Bottle ♻️", "Aluminum Can 🥫", "Paper 📰", "Food Waste 🍎", "Plastic Bag 🛍️"]
-            result = random.choice(trash_types)
+            try:
+                img = Image.open(img_data)
+                st.image(img, caption="Your photo", use_container_width=True)
 
-            img = Image.open(img_data)
-            st.image(img, caption="Your photo", use_column_width=True)
-            st.success(f"We think it's: **{result}**")
+                # Convert image data to bytes for Gemini
+                img_bytes = img_data.getvalue()
 
-        if st.button('Next ➡️'):
-            st.session_state.page_number += 1
-            st.rerun()
+                # Prepare the prompt with image data AND instructions for disposal/reuse
+                prompt = """Analyze this image and identify the type of trash.
+                Then, in the same response, provide a brief suggestion on how to properly dispose of or reuse this type of trash.
+                Be specific in your identification and suggestion. Use a bullet list string with no quotation marks. """
+
+                contents = [
+                    prompt,
+                    {"mime_type": "image/png", "data": img_bytes}
+                ]
+
+                # Generate content using Gemini Pro Vision
+                response = model.generate_content(contents)
+                full_response = response.text.strip()
+
+                st.subheader("What to do:")
+                st.info(full_response)
+
+                st.info("To do it again, ")
+
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+                st.error("Please ensure you have a valid Gemini API key in your Streamlit secrets.")
+        
+        go_home()
 
     # --- Page 3: Chat with Pet ---
     elif st.session_state.page_number == 3:
@@ -236,13 +267,12 @@ def show_pet():
             with st.chat_message("assistant"):
                 st.markdown(gemini_reply)
 
-        if st.button('🏠 Go Home'):
-            st.session_state.current_screen = 'welcome'
-            st.session_state.page_number = 0
-            st.session_state.chat_history = []
+        go_home()
+        
     # --- Page 4: Task Details ---
     elif st.session_state.page_number == 4:
         task = st.session_state.current_task
+        task_name = task['name']
         pet = pets[st.session_state.selected_pet]
 
         st.image(pet['image'], width=300)
@@ -251,25 +281,7 @@ def show_pet():
         st.write(f"🐾 {pet['name']} says:")
         st.success(f"Let's work together to {task['name'].lower()}! Here's how:")
 
-        if task['name'] == 'Save Water':
-            st.write("""
-            - 🚿 Take shorter showers (5 minutes or less!)
-            - 🪥 Turn off the tap when brushing your teeth.
-            - 🌧️ Collect rainwater for watering plants.
-            """)
-        elif task['name'] == 'Recycle':
-            st.write("""
-            - ♻️ Separate paper, plastic, glass, and metals.
-            - 🗑️ Find a local recycling center near you.
-            - 🔍 Always check recycling symbols on packaging!
-            """)
-        elif task['name'] == 'Plant Trees':
-            st.write("""
-            - 🌱 Find native trees suited to your area.
-            - 🧑‍🌾 Dig a small hole and gently place the sapling.
-            - 💧 Water the tree regularly to help it grow strong!
-            """)
-        elif task['name'] == 'Clean Up':
+        if task['name'] == 'Clean Up':
             st.write("""
             - 🧤 Wear gloves for safety.
             - 🚮 Pick up trash during a walk or visit to a park.
@@ -295,10 +307,22 @@ def show_pet():
             else:
                 st.info("Please upload a trash cleanup photo to complete this task!")
         else:
+            user_prompt = f"""
+                        I want to do {task_name}, please provide me three ways to do so. 
+                        Give the output string in a bullet list, no quotation marks.
+                    """
+            task_resp = get_pet_reply_with_gemini(
+                            user_prompt,
+                            pet_name=pet['name'],
+                            pet_habitat=pet['habitat']
+                        )
+            st.write(task_resp)
             # Normal Complete button for other tasks
             if st.button('✅ Complete Task'):
                 if task['name'] not in st.session_state.completed_tasks:
                     st.session_state.completed_tasks.append(task['name'])
+                    st.session_state.page_number = 1
+                    st.rerun()
 
 
     
