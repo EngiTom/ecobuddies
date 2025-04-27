@@ -3,6 +3,8 @@ from PIL import Image
 import io
 import os
 import google.generativeai as genai
+import base64
+import time
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -10,12 +12,12 @@ load_dotenv()
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-genai.configure(api_key=GEMINI_API_KEY) 
+
 model = genai.GenerativeModel('gemini-2.0-flash')
 
 # set defaults
 defaults = {
-    'current_screen': 'welcome',
+    'current_screen': 'gif',
     'selected_pet': None,
     'pet_happiness': 50,
     'sustainable_actions': 0,
@@ -34,36 +36,38 @@ for key, value in defaults.items():
 # Pet data 
 pets = {
     'redPanda': {
-        'name': 'Rusty', 
+        'name': 'Rusty',
         'animal': 'Red Panda',
-        'emoji': '🦊',
         'image' : 'https://media.tenor.com/3NBIXb4SaC4AAAAM/bear.gif',
         'habitat': 'Eastern Himalayan forests',
-        'tips': [
-            "Reducing your paper use helps save trees in my forest!",
-            "Buying bamboo products from sustainable sources helps protect my habitat."
-        ],
-        'facts': [
-            "My bamboo forests are shrinking due to deforestation and climate change.",
-            "There are fewer than 10,000 of us left in the wild today."
-        ],
-        'bg_color': '#b45c44'
+        'bg_color': '#FFCCCB',
+        'emoji': '🐼',
+    },
+    'polarBear': {
+        'name': 'Snowflake',
+        'animal': 'Polar Bear',
+        'image' : 'https://media.tenor.com/3NBIXb4SaC4AAAAM/bear.gif',
+        'habitat': 'the Artic',
+        'bg_color': '#A4D8E1',
+        'emoji': '🐻‍❄️',
+
     },
     'koala': {
         'name': 'Kiki',
         'animal': 'Koala',
-        'emoji': '🐨',
         'image' : "https://media.tenor.com/5XKP-A-hxQIAAAAj/koala-day-koala-day-nft.gif",
         'habitat': 'Eucalyptus forests of Eastern Australia',
-        'tips': [
-            "Conserving water helps prevent drought that can lead to bushfires in my home.",
-            "Reducing plastic waste helps protect wildlife in Australia like me!"
-        ],
-        'facts': [
-            "Bushfires have destroyed millions of acres of my home.",
-            "Urban development is breaking up our forests."
-        ],
-        'bg_color': "#1f5e33"
+        'bg_color': "#7DAA92",
+        "emoji": '🐨',
+    },
+
+    'whale': {
+        'name': 'Nautica',
+        'animal': 'Humpback Whale',
+        'image' : "https://media1.tenor.com/m/L9MMAzLc5kAAAAAC/humpback-whale-whale.gif",
+        'habitat' :'ocean',
+        'bg_color': "#A4D8E1",
+        'emoji': '🐋',
     }
 }
 
@@ -88,6 +92,26 @@ animal_actions = {
         {'name': 'Take a 5-Minute Shower', 'points': 5, 'emoji': '🚿'},
         {'name': 'Recycle Something Today', 'points': 5, 'emoji': '♻️'},
         {'name': 'Educate a Friend', 'points': 5, 'emoji': '📚'},
+    ],
+    'whale': [
+        {'name': 'Reduce Plastic Use', 'points': 10, 'emoji': '🚯'},
+        {'name': 'Use a Reusable Straw', 'points': 5, 'emoji': '🥤'},
+        {'name': 'Support Ocean Conservation', 'points': 20, 'emoji': '🌊'},
+        {'name': 'Participate in a Beach Cleanup', 'points': 15, 'emoji': '🏖️'},
+        {'name': 'Educate Others About Marine Life', 'points': 10, 'emoji': '📚'},
+        {'name': 'Choose Sustainable Seafood', 'points': 15, 'emoji': '🐟'},
+        {'name': 'Reduce Water Usage', 'points': 10, 'emoji': '💧'},
+        {'name': 'Use Eco-Friendly Products', 'points': 10, 'emoji': '🧴'}
+    ],
+    'polarBear' : [
+    {'name': 'Switch to Renewable Energy', 'points': 20, 'emoji': '🌞'},
+    {'name': 'Drive Less, Bike More', 'points': 15, 'emoji': '🚲'},
+    {'name': 'Eat a Plant-Based Meal', 'points': 10, 'emoji': '🥗'},
+    {'name': 'Reduce Home Heating Usage', 'points': 10, 'emoji': '🔥'},
+    {'name': 'Vote for Climate Policies', 'points': 20, 'emoji': '🗳️'},
+    {'name': 'Avoid Single-Use Plastics', 'points': 10, 'emoji': '🚯'},
+    {'name': 'Unplug Devices', 'points': 5, 'emoji': '🔌'},
+    {'name': 'Spread Awareness', 'points': 10, 'emoji': '📢'}
     ]
 }
 
@@ -152,30 +176,124 @@ def perform_action(points):
         st.session_state.show_tip = True
 
 # Welcome screen
+def style_image_buttons():
+    st.markdown("""
+        <style>
+        div[data-testid="stButton"] > button {
+            background-color: transparent;
+            border: none;
+            padding: 0;
+        }
+        div[data-testid="stButton"] > button:hover {
+            transform: scale(1.05);
+            transition: 0.3s;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+def clickable_image(image_path, key, pet_name):
+    button_html = f"""
+    <style>
+        .img-button-{key} {{
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+        }}
+        .img-button-{key} img {{
+            width: 200px;
+            border-radius: 15px;
+            transition: transform 0.3s;
+        }}
+        .img-button-{key}:hover img {{
+            transform: scale(1.05);
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3);
+        }}
+    </style>
+    <button class="img-button-{key}" key="{key}" onClick="document.getElementById('{pet_name}').click();">
+        <img src="data:image/png;base64,{image_path}" alt="{pet_name}">
+    </button>
+    """
+    return button_html
+
+def image_to_base64(path):
+    with open(path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
+def show_gif():
+    # Display the GIF only once
+    st.image('https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExNnYyemNzbzlobHJhcXBudHp5Z3o4cncyM2lycnh6ODYzcmk2bmpzdCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/sx0NAad049ow46AsGU/giphy.gif', width=700)
+    # Provide the user with a button to continue
+    st.markdown("""
+        <style>
+        .center-button {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .stButton > button {
+            width: 200px; /* You can adjust the width */
+            font-size: 18px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+
+    # Display the button only after GIF is shown
+    if st.button('Continue to Buddies'):
+        # Transition to the next screen (welcome screen)
+        st.session_state.current_screen = 'welcome'
+        st.rerun() 
 def show_welcome():
-    st.title('🌿 EcoBuddies')
-    st.header('Choose your EcoBuddy')
+    st.title('🌿 Welcome to EcoBuddies! 🌿')
+    st.subheader('Choose your EcoBuddy!')
 
-    col1, col2 = st.columns(2)
+    # Convert images to base64
+    polar_bear_img = image_to_base64('PolarBear.png')
+    koala_img = image_to_base64('Koala.png')
+    whale_img = image_to_base64('Whale.png')
+    col1, col2, col3 = st.columns(3)
 
-    # Create buttons
     with col1:
-        red_panda_clicked = st.button('🦊 Red Panda', key='redPanda')
+        if st.button('Choose Polar Bear'):
+            st.session_state.selected_pet = 'polarBear'
+            st.session_state.current_screen = 'pet'
+            st.session_state.page_number = 0
+            st.session_state.chat_history = []
+            st.session_state.gif_shown = False
+            st.session_state.current_screen = 'gif'
+            st.rerun()
+
+        # Display image
+        st.markdown(clickable_image(polar_bear_img, key='polar', pet_name='Polar Bear'), unsafe_allow_html=True)
 
     with col2:
-        koala_clicked = st.button('🐨 Koala', key='koala')
+        if st.button('Choose Koala'):
+            st.session_state.selected_pet = 'koala'
+            st.session_state.current_screen = 'pet'
+            st.session_state.page_number = 0
+            st.session_state.chat_history = []
+            st.session_state.gif_shown = False
+            st.session_state.current_screen = 'gif'
+            st.rerun()
 
-    # 🛑 Don't switch screens inside the button code!
+        # Display image
+        st.markdown(clickable_image(koala_img, key='koala', pet_name='Koala'), unsafe_allow_html=True)
 
-    # ✅ Instead, AFTER the buttons:
-    if red_panda_clicked:
-        set_pet('redPanda')
+    with col3:
+        if st.button('Choose Whale'):
+            st.session_state.selected_pet = 'whale'
+            st.session_state.current_screen = 'pet'
+            st.session_state.page_number = 0
+            st.session_state.chat_history = []
+            st.session_state.gif_shown = False
+            st.session_state.current_screen = 'gif'
+            st.rerun()
 
-    if koala_clicked:
-        set_pet('koala')
-    
-    
+        # Display image
+        st.markdown(clickable_image(whale_img, key='whale', pet_name='Whale'), unsafe_allow_html=True)
 
+       
 def go_home():
     if st.button('🏠 Go Home'):
         st.session_state.page_number = 1
@@ -285,7 +403,7 @@ def show_pet(): # main function
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        user_input = st.chat_input(f"Talk to {pet['name']}")
+        user_input = st.text_input(f"Talk to {pet['name']}")
 
         if user_input:
             st.session_state.chat_history.append({"role": "user", "content": user_input})
@@ -296,8 +414,9 @@ def show_pet(): # main function
                 pet_tag=pet_tag,
             )
 
-            st.session_state.chat_history.append({"role": "assistant", "content": gemini_reply})
-            with st.chat_message("assistant"):
+            st.session_state.chat_history.append({"role": "assistant", "content": gemini_reply, })
+            animal = pet['animal']
+            with st.chat_message("assistant", avatar=pet['emoji']):
                 st.markdown(gemini_reply)
 
         go_home()
@@ -315,15 +434,51 @@ def show_pet(): # main function
         st.success(f"Let's work together to {task['name'].lower()}! Here's how:")
         
         # DO TASK
+        # Ask Gemini for 3 ways (already done)
+        # --- inside your Page 4: Task Details ---
+
+# Ask Gemini for 3 ways (already done)
         user_prompt = f"""
-                    I want to do {task_name}, please provide me three ways to do so. 
-                    Give the output string in a bullet list, no quotation marks.
-                """
-        task_resp = get_pet_reply_with_gemini(
-                        user_prompt,
-                        pet_tag=pet_tag
-                    )
-        st.write(task_resp)
+        I want to do {task_name}, please provide me three ways to do so.
+        Give the output string in a bullet list, no quotation marks.
+        """
+        task_resp = get_pet_reply_with_gemini(user_prompt, pet_tag=pet_tag)
+
+        # Split the response into separate suggestions
+        ways = [way.strip("- ").strip("* ").strip() for way in task_resp.split("\n") if way.strip()]
+
+
+        # Initialize clicked keys if they don't exist
+        if "how_clicked" not in st.session_state:
+            st.session_state["how_clicked"] = None
+        if "why_clicked" not in st.session_state:
+            st.session_state["why_clicked"] = None
+
+        # Show each way with "How" and "Why" buttons
+        for idx, way in enumerate(ways):
+            st.markdown(f"**{way}**")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(f"🔎 How?", key=f"how_{idx}"):
+                    st.session_state["how_clicked"] = idx
+                    st.session_state["why_clicked"] = None  # reset
+            with col2:
+                if st.button(f"💡 Why?", key=f"why_{idx}"):
+                    st.session_state["why_clicked"] = idx
+                    st.session_state["how_clicked"] = None  # reset
+
+            # If clicked, show the follow-up answer
+            if st.session_state["how_clicked"] == idx:
+                followup_prompt = f"Explain HOW to '{way}' in a practical, simple way."
+                followup_response = get_pet_reply_with_gemini(followup_prompt, pet_tag=pet_tag)
+                st.success(f"**How:** {followup_response}")
+
+            if st.session_state["why_clicked"] == idx:
+                followup_prompt = f"Explain WHY it matters to '{way}' for the environment."
+                followup_response = get_pet_reply_with_gemini(followup_prompt, pet_tag=pet_tag)
+                st.info(f"**Why:** {followup_response}")
+
         # Normal Complete button for other tasks
         if st.button('✅ Complete Task'):
             complete_task(task)
@@ -334,7 +489,12 @@ def show_pet(): # main function
 
 # Main app
 def main():
-    if st.session_state.current_screen == 'welcome':
+    # if 'current_screen' not in st.session_state:
+    #     st.session_state.current_screen = 'gif'  # Start with the GIF screen
+    if st.session_state.current_screen == 'gif':
+        show_gif()  # Show the GIF screen
+
+    elif st.session_state.current_screen == 'welcome':
         show_welcome()
     elif st.session_state.current_screen == 'pet':
         show_pet()
