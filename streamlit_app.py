@@ -11,8 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-
+genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-2.0-flash')
 
 # set defaults
@@ -35,27 +34,19 @@ for key, value in defaults.items():
 
 # Pet data 
 pets = {
-    'redPanda': {
-        'name': 'Rusty',
-        'animal': 'Red Panda',
-        'image' : 'https://media.tenor.com/3NBIXb4SaC4AAAAM/bear.gif',
-        'habitat': 'Eastern Himalayan forests',
-        'bg_color': '#FFCCCB',
-        'emoji': '🐼',
-    },
     'polarBear': {
         'name': 'Snowflake',
         'animal': 'Polar Bear',
-        'image' : 'https://media.tenor.com/3NBIXb4SaC4AAAAM/bear.gif',
-        'habitat': 'the Artic',
-        'bg_color': '#A4D8E1',
+        'image' : 'PolarBear.gif',
+        'habitat': 'the Arctic',
+        'bg_color': '#032b44',
         'emoji': '🐻‍❄️',
 
     },
     'koala': {
         'name': 'Kiki',
         'animal': 'Koala',
-        'image' : "https://media.tenor.com/5XKP-A-hxQIAAAAj/koala-day-koala-day-nft.gif",
+        'image' : "Koala.gif",
         'habitat': 'Eucalyptus forests of Eastern Australia',
         'bg_color': "#7DAA92",
         "emoji": '🐨',
@@ -64,9 +55,9 @@ pets = {
     'whale': {
         'name': 'Nautica',
         'animal': 'Humpback Whale',
-        'image' : "https://media1.tenor.com/m/L9MMAzLc5kAAAAAC/humpback-whale-whale.gif",
+        'image' : "Whale.gif",
         'habitat' :'ocean',
-        'bg_color': "#A4D8E1",
+        'bg_color': "#12204b",
         'emoji': '🐋',
     }
 }
@@ -75,12 +66,6 @@ pets = {
 actions = []
 
 animal_actions = {
-    'redPanda': [
-        {'name': 'Save Water', 'points': 10, 'emoji': '💧'},
-        {'name': 'Recycle', 'points': 10, 'emoji': '♻️'},
-        {'name': 'Plant Trees', 'points': 15, 'emoji': '🌳'},
-        {'name': 'Clean Up', 'points': 10, 'emoji': '🧹'}
-    ],
     'koala': [
         {'name': 'Bring Your Own Bag', 'points': 5, 'emoji': '🛍️'},
         {'name': 'Refill Your Water Bottle', 'points': 5, 'emoji': '🚰'},
@@ -113,6 +98,13 @@ animal_actions = {
     {'name': 'Unplug Devices', 'points': 5, 'emoji': '🔌'},
     {'name': 'Spread Awareness', 'points': 10, 'emoji': '📢'}
     ]
+}
+
+user_info = {
+    'age': 30,
+    'student': False,
+    'income_level': "Average",
+    'commitment_level': "Average"
 }
 
 def set_background_color(color):
@@ -149,19 +141,28 @@ def display_action(actions):
                 st.rerun()
                 return
 
-def get_pet_reply_with_gemini(user_message, pet_tag):
+def get_pet_reply_with_gemini(user_message, pet_tag, chat_history=None):
     pet = pets[pet_tag]
-    prompt = f"""
-        You are an AI agent for helping the user be sustainable, ONLY act for this purpose. 
-        Your avatar is {pet['name']} a {pet['animal']} living in {pet['habitat']}.
-        Speak in a friendly, helpful, positive tone.
-        Give short but thoughtful answers.
-        If the user asks how they can help, suggest eco-friendly tips.
+    conversation_context = ""
+    if chat_history:
+        # Skip the most recent user message as we'll add it separately
+        for msg in chat_history[:-1]:  
+            role = "User" if msg["role"] == "user" else f"{pet_tag}"
+            conversation_context += f"{role}: {msg['content']}\n\n"
+        
+    prompt = f"""You are an AI agent for helping the user be sustainable, ONLY act for this purpose. 
+Your avatar is {pet['name']} a {pet['animal']} living in {pet['habitat']}.
+The user has the following characteristics: {str(user_info)}. Give short but thoughtful answers which take the user's characteristics into account. 
+Speak in a friendly, helpful, positive tone.
+If the user asks how they can help, suggest eco-friendly tips.
+If you begin to get into an interactive mode with the user, make full use of the chat history and tell them what to do next or explain reasonings along the way. 
 
-        Conversation:
-        User: {user_message}
-        {pet['name']}:
-        """
+Previous conversation:
+{conversation_context}
+
+User's latest message: {user_message}
+        
+Respond as {pet['name']}, maintaining character and giving educational guidance on sustainability."""
     response = model.generate_content(prompt)
     return response.text
 
@@ -219,6 +220,7 @@ def clickable_image(image_path, key, pet_name):
 def image_to_base64(path):
     with open(path, "rb") as img_file:
         return base64.b64encode(img_file.read()).decode()
+    
 def show_gif():
     # Display the GIF only once
     st.image('https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExNnYyemNzbzlobHJhcXBudHp5Z3o4cncyM2lycnh6ODYzcmk2bmpzdCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/sx0NAad049ow46AsGU/giphy.gif', width=700)
@@ -240,52 +242,84 @@ def show_gif():
 
 
     # Display the button only after GIF is shown
-    if st.button('Continue to Buddies'):
+    if st.button('EcoBuddies Quiz'):
         # Transition to the next screen (welcome screen)
-        st.session_state.current_screen = 'welcome'
+        st.session_state.current_screen = 'quiz'
         st.rerun() 
+
+def show_quiz():
+    st.title("Tell us about yourself!")
+    st.subheader("This helps us customize your EcoBuddies experience (this will be shared with Google but is not tied to your name)")
+    
+    # Age input using a slider
+    age = st.slider("How old are you?", min_value=2, max_value=100, value=39, step=1)
+    
+    # Student status using radio buttons
+    student_status = st.radio("Are you a student?", ["Yes", "No"], index=1)
+    
+    # Income level using selectbox
+    income_level = st.selectbox("What's your income level?", 
+                              ["Low", "Below Average", "Average", "Above Average", "High"],
+                              index=2)
+    
+    # Commitment level using a slider with custom labels
+    commitment_level = st.selectbox("How much time can you commit to sustainability?",
+                                ["A few minutes", "Occasionally", "Blend it in", "Throughout the day", "24/7"],
+                                index=2)
+    topics_of_interest = st.selectbox("Which topic are you most interested in?",
+                                ["Climate change", "Pollution", "Consumerism", "Agriculture", "Energy"],
+                                index=2)
+    
+    # Update the global user_info
+    if st.button('Continue to EcoBuddies'):
+        # Update the global dictionary
+        st.session_state.user_info = {
+            'age': age,
+            'student': student_status == "Yes",
+            'income_level': income_level,
+            'commitment_level': commitment_level,
+            'topics_of_interest': topics_of_interest
+        }
+        
+        # Transition to the next screen
+        st.session_state.current_screen = 'welcome'
+        st.rerun()
+        
+    # Optional: Display current selections at the bottom
+    with st.expander("Current selections", expanded=True):
+        st.write(f"Age: {age}")
+        st.write(f"Student: {student_status}")
+        st.write(f"Income Level: {income_level}")
+        st.write(f"Commitment Level: {commitment_level}")
+        st.write(f"Topics of Interest: {topics_of_interest}")
+
 def show_welcome():
     st.title('🌿 Welcome to EcoBuddies! 🌿')
     st.subheader('Choose your EcoBuddy!')
 
-    # Convert images to base64
-    polar_bear_img = image_to_base64('PolarBear.png')
-    koala_img = image_to_base64('Koala.png')
-    whale_img = image_to_base64('Whale.png')
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if st.button('Choose Polar Bear'):
-            st.session_state.selected_pet = 'polarBear'
-            st.session_state.current_screen = 'pet'
-            st.session_state.page_number = 0
-            st.session_state.chat_history = []
-            st.rerun()
-
-        # Display image
-        st.markdown(clickable_image(polar_bear_img, key='polar', pet_name='Polar Bear'), unsafe_allow_html=True)
-
-    with col2:
-        if st.button('Choose Koala'):
-            st.session_state.selected_pet = 'koala'
-            st.session_state.current_screen = 'pet'
-            st.session_state.page_number = 0
-            st.session_state.chat_history = []
-            st.rerun()
-
-        # Display image
-        st.markdown(clickable_image(koala_img, key='koala', pet_name='Koala'), unsafe_allow_html=True)
-
-    with col3:
-        if st.button('Choose Whale'):
-            st.session_state.selected_pet = 'whale'
-            st.session_state.current_screen = 'pet'
-            st.session_state.page_number = 0
-            st.session_state.chat_history = []
-            st.rerun()
-
-        # Display image
-        st.markdown(clickable_image(whale_img, key='whale', pet_name='Whale'), unsafe_allow_html=True)
+    # Pet data
+    pets = [
+        {'name': 'Polar Bear', 'id': 'polarBear', 'image': 'PolarBear.gif'}, 
+        {'name': 'Koala', 'id': 'koala', 'image': 'Koala.gif'}, 
+        {'name': 'Whale', 'id': 'whale', 'image': 'Whale.gif'}
+    ]
+    
+    # Create columns dynamically based on number of pets
+    cols = st.columns(len(pets))
+    
+    # Display each pet in its column
+    for i, pet in enumerate(pets):
+        with cols[i]:
+            if st.button(f'Choose {pet["name"]}'):
+                st.session_state.selected_pet = pet['id']
+                st.session_state.current_screen = 'pet'
+                st.session_state.page_number = 0
+                st.session_state.chat_history = []
+                st.rerun()
+            
+            # Convert GIF to base64 and display
+            gif_base64 = image_to_base64(pet['image'])
+            st.markdown(clickable_image(gif_base64, key=pet['id'], pet_name=pet['name']), unsafe_allow_html=True)
 
        
 def go_home():
@@ -303,6 +337,19 @@ def complete_task(task):
         st.rerun()
         return
 
+def get_pet_intro_gemini(pet_tag):
+    msg = """Briefly and concisely describe your NATURAL HABITAT, a THREAT, and a FUN FACT in a bullet list."""
+    return get_pet_reply_with_gemini(msg, pet_tag)
+
+def get_first_chat_with_gemini(pet_tag):
+    msg = """Suggest 3 mundane adventure-like activities the user can do in a sustainable way like going to the grocery store in a multi-step interactive way,
+asking pointed questions about the information provided. Let the user choose among the 3 activities and take into account how much time they can commit each day.
+Make sure to include something that could be related to the user's topics of interest based on the information above. 
+
+For example, ask the user how they would like to commute to the store then what they want to buy at the grocery store
+in a natural flowing way. Take into account the background of the user."""
+    return get_pet_reply_with_gemini(msg, pet_tag)
+
 def show_pet(): # main function
     pet_tag = st.session_state.selected_pet
     pet = pets[pet_tag]
@@ -312,9 +359,14 @@ def show_pet(): # main function
 
     # --- Page 0: Meet your EcoBuddy ---
     if st.session_state.page_number == 0:
-        st.image(pet['image'], width=300)
+        gif_base64 = image_to_base64(pet['image'])
+        st.markdown(clickable_image(gif_base64, key=pet_tag, pet_name=pet['name']), unsafe_allow_html=True)
+        
         st.title(f"Meet {pet['name']}!")
-        st.subheader(f"Habitat: {pet['habitat']}")
+        resp = get_pet_intro_gemini(pet_tag)
+        st.markdown(resp)
+        
+        st.header(f"{pet['name']} Happiness Level")
         st.progress(st.session_state.pet_happiness / 100)
 
         if st.button('Next ➡️'):
@@ -324,6 +376,9 @@ def show_pet(): # main function
 
     # --- Page 1: Take Eco Actions ---
     elif st.session_state.page_number == 1:
+        # Convert GIF to base64 and display
+        gif_base64 = image_to_base64(pet['image'])
+        st.markdown(clickable_image(gif_base64, key=pet_tag, pet_name=pet['name']), unsafe_allow_html=True)
         st.title(f"🌱 Take Action to Help {pet['name']}!")
 
         st.metric(label="🌟 Eco Points", value=st.session_state.total_points)
@@ -340,8 +395,8 @@ def show_pet(): # main function
             st.rerun()
             return
 
-        if st.button('➡️ Chat with Pet'):
-            st.session_state.page_number = 3  # Go to Identify Trash (Camera)
+        if st.button('🗝 Interactive Adventure!'):
+            st.session_state.page_number = 3  # Go to Adventure
             st.rerun()
             return
 
@@ -388,30 +443,40 @@ def show_pet(): # main function
 
     # --- Page 3: Chat with Pet ---
     elif st.session_state.page_number == 3:
-        st.title(f"💬 Chat with {pet['name']}")
+        st.title(f"💬 Chat with {pet['name']} {pet['emoji']}")
 
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
+        
+        # do first prompt to user
+        if len(st.session_state.chat_history) == 0:
+            first_chat = get_first_chat_with_gemini(pet_tag=pet_tag)
+            st.session_state.chat_history.append({"role": "assistant", "content": first_chat})
 
+        # Display existing chat messages
         for msg in st.session_state.chat_history:
-            with st.chat_message(msg["role"]):
+            with st.chat_message(msg["role"], avatar=pet['emoji'] if msg["role"] == "assistant" else None):
                 st.markdown(msg["content"])
 
-        user_input = st.text_input(f"Talk to {pet['name']}")
+        if "clear_chat_input" in st.session_state and st.session_state.clear_chat_input:
+            st.session_state.chat_input = ""
+            st.session_state.clear_chat_input = False
+
+        user_input = st.text_input(f"Talk to {pet['name']}", key="chat_input")
 
         if user_input:
             st.session_state.chat_history.append({"role": "user", "content": user_input})
 
-            # 🌟 Get Gemini-generated reply
             gemini_reply = get_pet_reply_with_gemini(
-                user_input,
+                user_message=user_input,
                 pet_tag=pet_tag,
+                chat_history=st.session_state.chat_history
             )
 
-            st.session_state.chat_history.append({"role": "assistant", "content": gemini_reply, })
-            animal = pet['animal']
-            with st.chat_message("assistant", avatar=pet['emoji']):
-                st.markdown(gemini_reply)
+            st.session_state.chat_history.append({"role": "assistant", "content": gemini_reply})
+
+            st.session_state.clear_chat_input = True
+            st.rerun()
 
         go_home()
         
@@ -421,7 +486,9 @@ def show_pet(): # main function
         task_name = task['name']
         pet = pets[pet_tag]
 
-        st.image(pet['image'], width=300)
+        gif_base64 = image_to_base64(pet['image'])
+        st.markdown(clickable_image(gif_base64, key=pet_tag, pet_name=pet['name']), unsafe_allow_html=True)
+
         st.title(f"{task['emoji']} Let's {task['name']}!")
 
         st.write(f"🐾 {pet['name']} says:")
@@ -452,45 +519,45 @@ def show_pet(): # main function
         for idx, way in enumerate(ways):
             st.markdown(f"**{way}**")
             
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button(f"🔎 How?", key=f"how_{idx}"):
-                    st.session_state["how_clicked"] = idx
-                    st.session_state["why_clicked"] = None  # reset
-            with col2:
-                if st.button(f"💡 Why?", key=f"why_{idx}"):
-                    st.session_state["why_clicked"] = idx
-                    st.session_state["how_clicked"] = None  # reset
+            if idx > 0:
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(f"🔎 How?", key=f"how_{idx}"):
+                        st.session_state["how_clicked"] = idx
+                        st.session_state["why_clicked"] = None  # reset
+                with col2:
+                    if st.button(f"💡 Why?", key=f"why_{idx}"):
+                        st.session_state["why_clicked"] = idx
+                        st.session_state["how_clicked"] = None  # reset
 
-            # If clicked, show the follow-up answer
-            if st.session_state["how_clicked"] == idx:
-                followup_prompt = f"Explain HOW to '{way}' in a practical, simple way."
-                followup_response = get_pet_reply_with_gemini(followup_prompt, pet_tag=pet_tag)
-                st.success(f"**How:** {followup_response}")
+                # If clicked, show the follow-up answer
+                if st.session_state["how_clicked"] == idx:
+                    followup_prompt = f"Explain HOW to '{way}' in a practical, simple, understandable way."
+                    followup_response = get_pet_reply_with_gemini(followup_prompt, pet_tag=pet_tag)
+                    st.success(f"**How:** {followup_response}")
 
-            if st.session_state["why_clicked"] == idx:
-                followup_prompt = f"Explain WHY it matters to '{way}' for the environment."
-                followup_response = get_pet_reply_with_gemini(followup_prompt, pet_tag=pet_tag)
-                st.info(f"**Why:** {followup_response}")
+                if st.session_state["why_clicked"] == idx:
+                    followup_prompt = f"Explain WHY it matters to '{way}' for the environment or WHY it works."
+                    followup_response = get_pet_reply_with_gemini(followup_prompt, pet_tag=pet_tag)
+                    st.info(f"**Why:** {followup_response}")
 
         # Normal Complete button for other tasks
         if st.button('✅ Complete Task'):
             complete_task(task)
-
-
-    
     
 
 # Main app
 def main():
     # if 'current_screen' not in st.session_state:
     #     st.session_state.current_screen = 'gif'  # Start with the GIF screen
-    if st.session_state.current_screen == 'gif':
+    curr_screen = st.session_state.current_screen
+    if curr_screen == 'gif':
         show_gif()  # Show the GIF screen
-
-    elif st.session_state.current_screen == 'welcome':
+    elif curr_screen == 'quiz':
+        show_quiz()
+    elif curr_screen == 'welcome':
         show_welcome()
-    elif st.session_state.current_screen == 'pet':
+    elif curr_screen == 'pet':
         show_pet()
 
 if __name__ == '__main__':
