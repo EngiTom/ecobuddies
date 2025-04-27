@@ -260,8 +260,6 @@ def show_welcome():
             st.session_state.current_screen = 'pet'
             st.session_state.page_number = 0
             st.session_state.chat_history = []
-            st.session_state.gif_shown = False
-            st.session_state.current_screen = 'gif'
             st.rerun()
 
         # Display image
@@ -273,8 +271,6 @@ def show_welcome():
             st.session_state.current_screen = 'pet'
             st.session_state.page_number = 0
             st.session_state.chat_history = []
-            st.session_state.gif_shown = False
-            st.session_state.current_screen = 'gif'
             st.rerun()
 
         # Display image
@@ -286,8 +282,6 @@ def show_welcome():
             st.session_state.current_screen = 'pet'
             st.session_state.page_number = 0
             st.session_state.chat_history = []
-            st.session_state.gif_shown = False
-            st.session_state.current_screen = 'gif'
             st.rerun()
 
         # Display image
