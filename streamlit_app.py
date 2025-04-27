@@ -13,34 +13,30 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY) 
 model = genai.GenerativeModel('gemini-2.0-flash')
 
-# Initialize session state variables
-if 'current_screen' not in st.session_state:
-    st.session_state.current_screen = 'welcome'
-if 'selected_pet' not in st.session_state:
-    st.session_state.selected_pet = None
-if 'pet_happiness' not in st.session_state:
-    st.session_state.pet_happiness = 50
-if 'sustainable_actions' not in st.session_state:
-    st.session_state.sustainable_actions = 0
-if 'current_tip' not in st.session_state:
-    st.session_state.current_tip = 0
-if 'show_tip' not in st.session_state:
-    st.session_state.show_tip = False
-if 'page_number' not in st.session_state:
-    st.session_state.page_number = 0
-if 'total_points' not in st.session_state:
-    st.session_state.total_points = 0
-if 'current_task' not in st.session_state:
-    st.session_state.current_task = None
-if 'completed_tasks' not in st.session_state:
-    st.session_state.completed_tasks = []
+# set defaults
+defaults = {
+    'current_screen': 'welcome',
+    'selected_pet': None,
+    'pet_happiness': 50,
+    'sustainable_actions': 0,
+    'current_tip': 0,
+    'show_tip': False,
+    'page_number': 0,
+    'total_points': 0,
+    'current_task': None,
+    'completed_tasks': []
+}
 
-
+for key, value in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 # Pet data 
 pets = {
     'redPanda': {
-        'name': 'Rusty', # TODO: add animal type
+        'name': 'Rusty', 
+        'animal': 'Red Panda',
+        'emoji': '🦊',
         'image' : 'https://media.tenor.com/3NBIXb4SaC4AAAAM/bear.gif',
         'habitat': 'Eastern Himalayan forests',
         'tips': [
@@ -50,10 +46,12 @@ pets = {
         'facts': [
             "My bamboo forests are shrinking due to deforestation and climate change.",
             "There are fewer than 10,000 of us left in the wild today."
-        ]
+        ],
+        'bg_color': '#b45c44'
     },
     'koala': {
         'name': 'Kiki',
+        'animal': 'Koala',
         'emoji': '🐨',
         'image' : "https://media.tenor.com/5XKP-A-hxQIAAAAj/koala-day-koala-day-nft.gif",
         'habitat': 'Eucalyptus forests of Eastern Australia',
@@ -64,43 +62,81 @@ pets = {
         'facts': [
             "Bushfires have destroyed millions of acres of my home.",
             "Urban development is breaking up our forests."
-        ]
+        ],
+        'bg_color': "#1f5e33"
     }
 }
 
 # Actions
 actions = []
-panda_actions = [
-    {'name': 'Save Water', 'points': 10, 'emoji': '💧'},
-    {'name': 'Recycle', 'points': 10, 'emoji': '♻️'},
-    {'name': 'Plant Trees', 'points': 15, 'emoji': '🌳'},
-    {'name': 'Clean Up', 'points': 10, 'emoji': '🧹'}
-]
 
-koala_actions = [
-    {'name': 'Bring Your Own Bag', 'points': 5, 'emoji': '🛍️'},
-    {'name': 'Refill Your Water Bottle', 'points': 5, 'emoji': '🚰'},
-    {'name': 'Turn Off Lights', 'points': 5, 'emoji': '💡'},
-    {'name': 'Walk or Bike Instead of Driving', 'points': 10, 'emoji': '🚲'},
-    {'name': 'Eat a Plant-Based Meal', 'points': 10, 'emoji': '🥗'},
-    {'name': 'Pick Up 3 Pieces of Litter', 'points': 10, 'emoji': '🧹'},
-    {'name': 'Unplug Electronics', 'points': 5, 'emoji': '🔌'},
-    {'name': 'Take a 5-Minute Shower', 'points': 5, 'emoji': '🚿'},
-    {'name': 'Recycle Something Today', 'points': 5, 'emoji': '♻️'},
-    {'name': 'Educate a Friend', 'points': 5, 'emoji': '📚'},
-]
+animal_actions = {
+    'redPanda': [
+        {'name': 'Save Water', 'points': 10, 'emoji': '💧'},
+        {'name': 'Recycle', 'points': 10, 'emoji': '♻️'},
+        {'name': 'Plant Trees', 'points': 15, 'emoji': '🌳'},
+        {'name': 'Clean Up', 'points': 10, 'emoji': '🧹'}
+    ],
+    'koala': [
+        {'name': 'Bring Your Own Bag', 'points': 5, 'emoji': '🛍️'},
+        {'name': 'Refill Your Water Bottle', 'points': 5, 'emoji': '🚰'},
+        {'name': 'Turn Off Lights', 'points': 5, 'emoji': '💡'},
+        {'name': 'Walk or Bike Instead of Driving', 'points': 10, 'emoji': '🚲'},
+        {'name': 'Eat a Plant-Based Meal', 'points': 10, 'emoji': '🥗'},
+        {'name': 'Pick Up 3 Pieces of Litter', 'points': 10, 'emoji': '🧹'},
+        {'name': 'Unplug Electronics', 'points': 5, 'emoji': '🔌'},
+        {'name': 'Take a 5-Minute Shower', 'points': 5, 'emoji': '🚿'},
+        {'name': 'Recycle Something Today', 'points': 5, 'emoji': '♻️'},
+        {'name': 'Educate a Friend', 'points': 5, 'emoji': '📚'},
+    ]
+}
 
-def get_pet_reply_with_gemini(user_message, pet_name, pet_habitat):
+def set_background_color(color):
+    st.markdown(
+        f"""
+        <style>
+            .stApp {{
+                background-color: {color};
+            }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    return
+
+def set_pet(pet_name):
+    st.session_state.selected_pet = pet_name
+    st.session_state.current_screen = 'pet'
+    st.session_state.page_number = 0
+    st.session_state.chat_history = []
+    st.rerun()
+    return
+
+def display_action(actions):
+    for action in actions:
+        task_name = action['name']
+
+        if task_name in st.session_state.completed_tasks:
+            st.success(f"✅ {action['emoji']} {task_name} (Completed)")
+        else:
+            if st.button(f"{action['emoji']} {task_name} (+{action['points']} pts)"):
+                st.session_state.current_task = action
+                st.session_state.page_number = 4  # Go to task detail page
+                st.rerun()
+                return
+
+def get_pet_reply_with_gemini(user_message, pet_tag):
+    pet = pets[pet_tag]
     prompt = f"""
-        You are an AI agent for helping the user be sustainable, only act for this purpose. 
-        Your avatar is a {pet_name}, an endangered animal living in {pet_habitat}.
+        You are an AI agent for helping the user be sustainable, ONLY act for this purpose. 
+        Your avatar is {pet['name']} a {pet['animal']} living in {pet['habitat']}.
         Speak in a friendly, helpful, positive tone.
         Give short but thoughtful answers.
         If the user asks how they can help, suggest eco-friendly tips.
 
         Conversation:
         User: {user_message}
-        {pet_name}:
+        {pet['name']}:
         """
     response = model.generate_content(prompt)
     return response.text
@@ -115,7 +151,6 @@ def perform_action(points):
         st.session_state.current_tip = st.session_state.sustainable_actions // 2 % len(pets[st.session_state.selected_pet]['tips'])
         st.session_state.show_tip = True
 
-
 # Welcome screen
 def show_welcome():
     st.title('🌿 EcoBuddies')
@@ -125,7 +160,7 @@ def show_welcome():
 
     # Create buttons
     with col1:
-        red_panda_clicked = st.button('🦊 Red Panda', key='red_panda')
+        red_panda_clicked = st.button('🦊 Red Panda', key='redPanda')
 
     with col2:
         koala_clicked = st.button('🐨 Koala', key='koala')
@@ -134,30 +169,34 @@ def show_welcome():
 
     # ✅ Instead, AFTER the buttons:
     if red_panda_clicked:
-        st.session_state.selected_pet = 'redPanda'
-        st.session_state.current_screen = 'pet'
-        st.session_state.page_number = 0
-        st.session_state.chat_history = []
-        st.rerun()
+        set_pet('redPanda')
 
     if koala_clicked:
-        st.session_state.selected_pet = 'koala'
-        st.session_state.current_screen = 'pet'
-        st.session_state.page_number = 0
-        st.session_state.chat_history = []
-        st.rerun()
+        set_pet('koala')
+    
+    
 
 def go_home():
     if st.button('🏠 Go Home'):
-        st.session_state.page_number = 2
+        st.session_state.page_number = 1
         st.session_state.chat_history = []
+        st.rerun()
+        return
 
-def show_pet():
-    pet = pets[st.session_state.selected_pet]
-    if st.session_state.selected_pet == 'koala':
-        actions = koala_actions
-    else:
-        actions = panda_actions
+def complete_task(task):
+    if task['name'] not in st.session_state.completed_tasks:
+        st.session_state.completed_tasks.append(task['name'])
+        st.session_state.page_number = 1
+        st.session_state.total_points += task['points']
+        st.rerun()
+        return
+
+def show_pet(): # main function
+    pet_tag = st.session_state.selected_pet
+    pet = pets[pet_tag]
+    
+    set_background_color(pet['bg_color'])
+    actions = animal_actions[pet_tag]
 
     # --- Page 0: Meet your EcoBuddy ---
     if st.session_state.page_number == 0:
@@ -169,35 +208,30 @@ def show_pet():
         if st.button('Next ➡️'):
             st.session_state.page_number += 1
             st.rerun()
+            return
 
     # --- Page 1: Take Eco Actions ---
     elif st.session_state.page_number == 1:
-        st.title('🌱 Take Action to Help Your Pet!')
+        st.title(f"🌱 Take Action to Help {pet['name']}!")
 
         st.metric(label="🌟 Eco Points", value=st.session_state.total_points)
 
         st.subheader("✅ Completed Tasks are marked green!")
 
-        for action in actions:
-            task_name = action['name']
-
-            if task_name in st.session_state.completed_tasks:
-                st.success(f"✅ {action['emoji']} {task_name} (Completed)")
-            else:
-                if st.button(f"{action['emoji']} {task_name} (+{action['points']} pts)"):
-                    st.session_state.current_task = action
-                    st.session_state.page_number = 4  # Go to task detail page
+        display_action(actions)
 
         st.markdown('---')
         st.subheader("What would you like to do next?")
 
-        if st.button('➕ Complete Another Task'):
-            st.info("Pick another task above!")
-            st.rerun()
-
         if st.button('➡️ Identify trash'):
             st.session_state.page_number = 2  # Go to Identify Trash (Camera)
             st.rerun()
+            return
+
+        if st.button('➡️ Chat with Pet'):
+            st.session_state.page_number = 3  # Go to Identify Trash (Camera)
+            st.rerun()
+            return
 
 
 
@@ -232,7 +266,7 @@ def show_pet():
                 st.subheader("What to do:")
                 st.info(full_response)
 
-                st.info("To do it again, ")
+                st.info("Take another picture above to identify more trash!")
 
             except Exception as e:
                 st.error(f"An error occurred: {e}")
@@ -259,8 +293,7 @@ def show_pet():
             # 🌟 Get Gemini-generated reply
             gemini_reply = get_pet_reply_with_gemini(
                 user_input,
-                pet_name=pet['name'],
-                pet_habitat=pet['habitat']
+                pet_tag=pet_tag,
             )
 
             st.session_state.chat_history.append({"role": "assistant", "content": gemini_reply})
@@ -273,56 +306,27 @@ def show_pet():
     elif st.session_state.page_number == 4:
         task = st.session_state.current_task
         task_name = task['name']
-        pet = pets[st.session_state.selected_pet]
+        pet = pets[pet_tag]
 
         st.image(pet['image'], width=300)
         st.title(f"{task['emoji']} Let's {task['name']}!")
 
         st.write(f"🐾 {pet['name']} says:")
         st.success(f"Let's work together to {task['name'].lower()}! Here's how:")
-
-        if task['name'] == 'Clean Up':
-            st.write("""
-            - 🧤 Wear gloves for safety.
-            - 🚮 Pick up trash during a walk or visit to a park.
-            - 📸 Take a picture of the trash you collected!
-            """)
-
-            st.markdown("---")
-            st.subheader("📸 Upload your trash cleanup photo!")
-
-            # Show camera input
-            img_data = st.camera_input("Take a picture of the trash you collected")
-
-            # 🧠 Only allow task completion AFTER uploading a photo
-            if img_data:
-                if st.button('✅ Complete Task'):
-                    if task['name'] not in st.session_state.completed_tasks:
-                        st.session_state.completed_tasks.append(task['name'])
-
-                    perform_action(task['points'])
-                    st.success(f"You earned {task['points']} Eco Points! 🌟 Thanks for helping clean the planet! 🌎")
-                    st.session_state.current_task = None
-                    st.session_state.page_number = 1  # go back to Take Action page
-            else:
-                st.info("Please upload a trash cleanup photo to complete this task!")
-        else:
-            user_prompt = f"""
-                        I want to do {task_name}, please provide me three ways to do so. 
-                        Give the output string in a bullet list, no quotation marks.
-                    """
-            task_resp = get_pet_reply_with_gemini(
-                            user_prompt,
-                            pet_name=pet['name'],
-                            pet_habitat=pet['habitat']
-                        )
-            st.write(task_resp)
-            # Normal Complete button for other tasks
-            if st.button('✅ Complete Task'):
-                if task['name'] not in st.session_state.completed_tasks:
-                    st.session_state.completed_tasks.append(task['name'])
-                    st.session_state.page_number = 1
-                    st.rerun()
+        
+        # DO TASK
+        user_prompt = f"""
+                    I want to do {task_name}, please provide me three ways to do so. 
+                    Give the output string in a bullet list, no quotation marks.
+                """
+        task_resp = get_pet_reply_with_gemini(
+                        user_prompt,
+                        pet_tag=pet_tag
+                    )
+        st.write(task_resp)
+        # Normal Complete button for other tasks
+        if st.button('✅ Complete Task'):
+            complete_task(task)
 
 
     
