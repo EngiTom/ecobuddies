@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components  
 from PIL import Image
 import io
 import os
@@ -365,23 +366,63 @@ def show_pet(): # main function
         st.title(f"Meet {pet['name']}!")
         resp = get_pet_intro_gemini(pet_tag)
         st.markdown(resp)
-        
-        st.header(f"{pet['name']} Happiness Level")
-        st.progress(st.session_state.pet_happiness / 100)
 
-        if st.button('Next ➡️'):
-            st.session_state.page_number += 1
-            st.rerun()
-            return
+    if st.button('Next ➡️'):
+        st.session_state.page_number += 1
+        st.rerun()
+
 
     # --- Page 1: Take Eco Actions ---
     elif st.session_state.page_number == 1:
         # Convert GIF to base64 and display
         gif_base64 = image_to_base64(pet['image'])
         st.markdown(clickable_image(gif_base64, key=pet_tag, pet_name=pet['name']), unsafe_allow_html=True)
+
         st.title(f"🌱 Take Action to Help {pet['name']}!")
 
-        st.metric(label="🌟 Eco Points", value=st.session_state.total_points)
+        #Eco points 
+        import streamlit.components.v1 as components
+
+        eco_points = st.session_state.total_points 
+        max_points = 550
+
+        progress = min(eco_points / max_points, 1.0)
+        progress_percentage = int(progress * 100)
+
+        bar_color = "#FFA500" if eco_points < max_points else "#00C851"
+
+        html_code = f""" 
+    <div style="background-color: lightgray; border-radius: 25px; padding: 5px; height: 40px;">
+       <div style="
+            background-color: {bar_color};
+            width: 0%;
+            height: 30px;
+            border-radius: 20px;
+            animation: fillAnimation 2s ease-in-out forwards;
+            position: relative;
+          ">
+         </div> 
+        <div style="
+            position: absolute;
+             top; 50%;
+            left: 50%;
+            transform: translate(-50%,-50%);
+            font-weight: bold;
+            color: black;
+            font-size: 16px;
+        ">
+        {eco_points} / {max_points} Happiness Points
+      </div>
+    </div>
+
+    <style>
+    @keyframes fillAnimation {{
+      from {{ width: 0%; }}
+      to {{ width: {progress_percentage}%; }}
+     }}
+    </style>
+     """
+        components.html(html_code, height=70)
 
         st.subheader("✅ Completed Tasks are marked green!")
 
